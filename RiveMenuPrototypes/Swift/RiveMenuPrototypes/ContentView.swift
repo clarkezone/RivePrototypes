@@ -45,7 +45,8 @@ struct ContentView: View {
     @State private var selectedSource: RiveSource = RiveSource.builtInAssets[0]
     @State private var showingFilePicker = false
     @State private var showingInspector = false
-    @State private var lockAspectRatio = false
+    @AppStorage("lockAspectRatio") private var lockAspectRatio = false
+    @State private var reloadKey = 0
     @State private var errorMessage: String?
     @State private var debugInfo: RiveDebugInfo?
 
@@ -61,7 +62,7 @@ struct ContentView: View {
                 }
 
                 RiveSourceView(source: selectedSource, debugInfo: $debugInfo, lockAspectRatio: $lockAspectRatio)
-                    .id(selectedSource)
+                    .id("\(selectedSource.id)-\(reloadKey)")
                     .ignoresSafeArea()
                     .accessibilityIdentifier("riveCanvas")
             }
@@ -84,6 +85,7 @@ struct ContentView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     lockAspectRatio.toggle()
+                    reloadKey += 1
                 } label: {
                     Label(
                         lockAspectRatio ? "Unlock Aspect Ratio" : "Lock Aspect Ratio",
@@ -161,7 +163,6 @@ struct RiveSourceView: View {
     @State private var dataBindingInstance: RiveDataBindingViewModel.Instance?
     @State private var loadError: String?
     @State private var loadMethod: String = ""
-    @State private var didLoad = false
 
     private func enableDefaultAutoBinding(for model: RiveModel) {
         model.enableAutoBind { instance in
@@ -170,8 +171,7 @@ struct RiveSourceView: View {
     }
 
     private func loadSource() {
-        guard !didLoad else { return }
-        didLoad = true
+        loadError = nil
 
         switch source {
         case .bundled(let name, _):
@@ -205,8 +205,6 @@ struct RiveSourceView: View {
                 loadMethod = "failed"
             }
         }
-
-        debugInfo = buildDebugInfo()
     }
 
     private func buildDebugInfo(viewSize: CGSize = .zero) -> RiveDebugInfo {
@@ -301,10 +299,6 @@ struct RiveSourceView: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .onAppear { loadSource() }
-            .onChange(of: lockAspectRatio) {
-                riveViewModel?.fit = currentFit
-                debugInfo = buildDebugInfo(viewSize: geo.size)
-            }
             .onChange(of: geo.size) {
                 debugInfo = buildDebugInfo(viewSize: geo.size)
             }
