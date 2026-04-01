@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rive Player</title>
+<!-- Serve with: python3 -m http.server 8080 -->
+<script src="https://unpkg.com/@rive-app/canvas@2/rive.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; background: #1a1a1a; color: #e0e0e0; }
+  #toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #2a2a2a; border-bottom: 1px solid #3a3a3a; flex-shrink: 0; }
+  #toolbar select, #toolbar button { font-size: 13px; padding: 4px 10px; border-radius: 6px; border: 1px solid #555; background: #333; color: #e0e0e0; cursor: pointer; }
+  #toolbar button:hover { background: #444; }
+  #toolbar .spacer { flex: 1; }
+  #main { display: flex; flex: 1; min-height: 0; }
+  #canvas-wrap { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; background: #111; overflow: hidden; }
+  #canvas-wrap canvas { width: 100%; height: 100%; }
+  #loading { position: absolute; color: #888; font-size: 14px; }
+  #inspector { width: 300px; overflow-y: auto; background: #222; border-left: 1px solid #3a3a3a; padding: 12px; font-size: 12px; display: none; flex-shrink: 0; }
+  #inspector.open { display: block; }
+  #inspector section { margin-bottom: 12px; }
+  #inspector h3 { font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 6px; letter-spacing: 0.5px; }
+  #inspector .row { display: flex; justify-content: space-between; padding: 2px 0; font-family: 'SF Mono', 'Menlo', 'Consolas', monospace; font-size: 11px; }
+  #inspector .row .label { color: #ccc; }
+  #inspector .tag { font-size: 10px; color: #888; margin-left: 6px; }
+  #inspector .tag.active { color: #4ade80; }
+  #inspector .tag.default { color: #999; }
+  .yes { color: #4ade80; }
+  .no { color: #f87171; }
+  #inspector .item { padding: 2px 0; font-family: 'SF Mono', 'Menlo', 'Consolas', monospace; font-size: 11px; }
+  #inspector .empty { color: #666; font-style: italic; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <select id="source-picker">
+    <option value="digging_dinosaurs-2.riv">Digging Dinosaurs</option>
+  </select>
+  <button id="open-file-btn">Open File...</button>
+  <input type="file" id="file-input" accept=".riv" hidden>
+  <div class="spacer"></div>
+  <button id="inspector-toggle">Inspector</button>
+</div>
+
+<div id="main">
+  <div id="canvas-wrap">
+    <canvas id="rive-canvas"></canvas>
+    <div id="loading">Loading...</div>
+  </div>
+  <div id="inspector"></div>
+</div>
+
+<script>
+const canvas = document.getElementById('rive-canvas');
+const loading = document.getElementById('loading');
+const inspector = document.getElementById('inspector');
+const sourcePicker = document.getElementById('source-picker');
+const fileInput = document.getElementById('file-input');
+
+let riveInstance = null;
+let pollInterval = null;
+let stateChanges = [];
+
+// --- Canvas sizing ---
+const ro = new ResizeObserver(() => {
+  const wrap = canvas.parentElement;
+  canvas.width = wrap.clientWidth * devicePixelRatio;
+  canvas.height = wrap.clientHeight * devicePixelRatio;
+  if (riveInstance) riveInstance.resizeDrawingSurfaceToCanvas();
+});
+ro.observe(canvas.parentElement);
+
+// --- Load Rive ---
+function loadRive(source) {
+  if (riveInstance) {
+    riveInstance.cleanup();
+    riveInstance = null;
+  }
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
+  stateChanges = [];
+  loading.textContent = 'Loading...';
+  loading.style.display = '';
+
+  const opts = {
+    canvas: canvas,
+    autoplay: true,
+    onLoad: () => {
+      loading.style.display = 'none';
+      // Start the default state machine if one exists
+      var contents = riveInstance && riveInstance.contents;
+      if (contents && contents.artboards && contents.artboards.length > 0) {
+        var sms = contents.artboards[0].stateMachines || [];
+        if (sms.length > 0) {
+          riveInstance.play(sms[0].name);
+        }
+      }
+      updateInspector();
+      pollInterval = setInterval(updateInspector, 1000);
+    },
+    onStateChange: (event) => {
+      stateChanges = event.data || [];
+      updateInspector();
+    },
+    onLoadError: (e) => {
+      loading.textContent = 'Failed to load: ' + (e || 'unknown error');
+    },
+  };
+
+  if (source instanceof File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      opts.buffer = new Uint8Array(reader.result);
+      riveInstance = new rive.Rive(opts);
+    };
+    reader.readAsArrayBuffer(source);
+  } else {
+    opts.src = source;
+    riveInstance = new rive.Rive(opts);
+  }
+}
+
+// --- Inspector ---
+function updateInspector() {
+  if (!riveInstance) {
+    inspector.innerHTML = '<div class="empty">No file loaded</div>';
+    return;
+  }
+
+  const r = riveInstance;
+  const contents = r.contents;
+  let html = '';
+
+  const isPlaying = r.isPlaying;
+  const playingSMs = r.playingStateMachineNames || [];
+  const playingAnims = r.playingAnimationNames || [];
+
+  html += '<section><h3>Runtime State</h3>';
+  html += boolRow('isPlaying', isPlaying);
+  html += boolRow('autoplay', true);
+  html += '</section>';
+
+  if (contents) {
+    const artboards = contents.artboards || [];
+
+    html += '<section><h3>Artboards (' + artboards.length + ')</h3>';
+    if (artboards.length === 0) html += '<div class="empty">None</div>';
+    artboards.forEach(function(ab, i) {
+      var isDefault = i === 0;
+      html += '<div class="item">' + esc(ab.name) + (isDefault ? '<span class="tag default">default</span>' : '') + '</div>';
+    });
+    html += '</section>';
+
+    var ab = artboards[0];
+    if (ab) {
+      var sms = ab.stateMachines || [];
+      html += '<section><h3>State Machines (' + sms.length + ')</h3>';
+      if (sms.length === 0) html += '<div class="empty">None</div>';
+      sms.forEach(function(sm, i) {
+        var isActive = playingSMs.includes(sm.name);
+        var isDefault = i === 0;
+        html += '<div class="item">' + esc(sm.name);
+        if (isDefault) html += '<span class="tag default">default</span>';
+        if (isActive) html += '<span class="tag active">active</span>';
+        html += '</div>';
+      });
+      html += '</section>';
+
+      // SM Inputs
+      if (sms.length > 0) {
+        var smName = playingSMs[0] || sms[0].name;
+        try {
+          var inputs = r.stateMachineInputs(smName) || [];
+          if (inputs.length > 0) {
+            html += '<section><h3>SM Inputs (' + inputs.length + ')</h3>';
+            inputs.forEach(function(inp) {
+              var typeName = inp.type === rive.StateMachineInputType.Number ? 'Number'
+                : inp.type === rive.StateMachineInputType.Boolean ? 'Bool'
+                : inp.type === rive.StateMachineInputType.Trigger ? 'Trigger'
+                : 'Unknown';
+              html += '<div class="row"><span class="label">' + esc(inp.name) + '</span><span class="tag">' + typeName + '</span></div>';
+            });
+            html += '</section>';
+          }
+        } catch (e) { /* inputs not available yet */ }
+      }
+
+      // Animations
+      var anims = ab.animations || [];
+      html += '<section><h3>Animations (' + anims.length + ')</h3>';
+      if (anims.length === 0) html += '<div class="empty">None</div>';
+      anims.forEach(function(a) {
+        var isActive = playingAnims.includes(a.name);
+        html += '<div class="item">' + esc(a.name) + (isActive ? '<span class="tag active">active</span>' : '') + '</div>';
+      });
+      html += '</section>';
+    }
+  }
+
+  if (stateChanges.length > 0) {
+    html += '<section><h3>State Changes</h3>';
+    stateChanges.forEach(function(c) {
+      html += '<div class="item">' + esc(String(c)) + '</div>';
+    });
+    html += '</section>';
+  }
+
+  inspector.innerHTML = html;
+}
+
+function boolRow(label, value) {
+  return '<div class="row"><span class="label">' + label + '</span><span class="' + (value ? 'yes' : 'no') + '">' + (value ? 'YES' : 'NO') + '</span></div>';
+}
+
+function esc(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// --- Events ---
+sourcePicker.addEventListener('change', function() {
+  loadRive(sourcePicker.value);
+});
+
+document.getElementById('open-file-btn').addEventListener('click', function() {
+  fileInput.click();
+});
+
+fileInput.addEventListener('change', function() {
+  var file = fileInput.files[0];
+  if (!file) return;
+  var opt = document.createElement('option');
+  opt.textContent = file.name;
+  opt.value = '__file__';
+  opt.selected = true;
+  sourcePicker.appendChild(opt);
+  loadRive(file);
+  fileInput.value = '';
+});
+
+document.getElementById('inspector-toggle').addEventListener('click', function() {
+  inspector.classList.toggle('open');
+  setTimeout(function() { ro.observe(canvas.parentElement); }, 50);
+});
+
+// --- Init ---
+loadRive('digging_dinosaurs-2.riv');
+</script>
+</body>
+</html>
