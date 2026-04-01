@@ -11,7 +11,9 @@ import SwiftUI
 struct RiveMenuPrototypesApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            NavigationStack {
+                ContentView()
+            }
         }
     }
 }

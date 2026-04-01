@@ -37,6 +37,7 @@ enum RiveSource: Hashable, Identifiable {
     static let builtInAssets: [RiveSource] = [
         .bundled(name: "digging_dinosaurs-2", displayName: "Digging Dinosaurs"),
         .bundled(name: "sausagefest", displayName: "Sausagefest"),
+        .bundled(name: "layouttest", displayName: "Layout Test"),
     ]
 }
 
@@ -44,50 +45,62 @@ struct ContentView: View {
     @State private var selectedSource: RiveSource = RiveSource.builtInAssets[0]
     @State private var showingFilePicker = false
     @State private var showingInspector = false
+    @State private var lockAspectRatio = false
     @State private var errorMessage: String?
     @State private var debugInfo: RiveDebugInfo?
 
     var body: some View {
-        VStack {
-            HStack {
-                Picker("Animation", selection: $selectedSource) {
-                    ForEach(RiveSource.builtInAssets) { source in
-                        Text(source.displayName).tag(source)
-                    }
-                    if case .file = selectedSource {
-                        Text(selectedSource.displayName).tag(selectedSource)
-                    }
-                }
-                .pickerStyle(.menu)
-
-                Button("Open File...") {
-                    showingFilePicker = true
+        ZStack(alignment: .trailing) {
+            // Full-bleed Rive canvas
+            VStack(spacing: 0) {
+                if let errorMessage {
+                    Text(errorMessage)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                        .padding(.horizontal)
                 }
 
-                Spacer()
-
-                Button {
-                    showingInspector.toggle()
-                } label: {
-                    Image(systemName: "info.circle")
-                }
-            }
-            .padding(.horizontal)
-
-            if let errorMessage {
-                Text(errorMessage)
-                    .foregroundStyle(.red)
-                    .font(.caption)
-                    .padding(.horizontal)
+                RiveSourceView(source: selectedSource, debugInfo: $debugInfo, lockAspectRatio: $lockAspectRatio)
+                    .id(selectedSource)
+                    .ignoresSafeArea()
+                    .accessibilityIdentifier("riveCanvas")
             }
 
-            RiveSourceView(source: selectedSource, debugInfo: $debugInfo)
-                .id(selectedSource)
-                .padding(20)
+            // Inspector overlay
+            if showingInspector {
+                RiveInspectorView(
+                    debugInfo: debugInfo,
+                    selectedSource: $selectedSource,
+                    showingFilePicker: $showingFilePicker,
+                    isPresented: $showingInspector
+                )
+                .transition(.move(edge: .trailing))
+                .padding(.vertical, 8)
+                .padding(.trailing, 8)
+                .zIndex(1)
+            }
         }
-        .inspector(isPresented: $showingInspector) {
-            RiveInspectorView(debugInfo: debugInfo)
-                .inspectorColumnWidth(min: 250, ideal: 300, max: 400)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    lockAspectRatio.toggle()
+                } label: {
+                    Label(
+                        lockAspectRatio ? "Unlock Aspect Ratio" : "Lock Aspect Ratio",
+                        systemImage: lockAspectRatio ? "aspectratio.fill" : "aspectratio"
+                    )
+                }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        showingInspector.toggle()
+                    }
+                } label: {
+                    Label("Inspector", systemImage: "info.circle")
+                }
+            }
         }
         .fileImporter(
             isPresented: $showingFilePicker,
@@ -131,140 +144,30 @@ struct RiveDebugInfo {
     var stateMachineLayerCount: Int = 0
     var stateChanges: [String] = []
     var artboardBounds: CGRect = .zero
-}
-
-struct RiveInspectorView: View {
-    let debugInfo: RiveDebugInfo?
-
-    var body: some View {
-        List {
-            if let info = debugInfo {
-                if let error = info.error {
-                    Section("Error") {
-                        Text(error).foregroundStyle(.red)
-                    }
-                }
-
-                Section("Load Method") {
-                    Text(info.loadMethod).font(.caption).monospaced()
-                }
-
-                Section("Runtime State") {
-                    debugRow("isPlaying", value: info.isPlaying, good: true)
-                    if !info.isPlaying && info.hasStateMachineInstance {
-                        Text("SM settled (waiting for input)")
-                            .font(.caption2).foregroundStyle(.orange)
-                    }
-                    debugRow("autoPlay", value: info.autoPlay, good: true)
-                    debugRow("hasRiveView", value: info.hasRiveView, good: true)
-                    debugRow("hasRiveModel", value: info.hasRiveModel, good: true)
-                    debugRow("hasArtboard", value: info.hasArtboard, good: true)
-                    debugRow("hasStateMachine", value: info.hasStateMachineInstance, good: true)
-                    debugRow("hasAnimation", value: info.hasAnimationInstance, good: false)
-                }
-
-                Section("Artboards (\(info.artboardNames.count))") {
-                    ForEach(info.artboardNames, id: \.self) { name in
-                        HStack {
-                            Text(name).font(.caption).monospaced()
-                            if name == info.defaultArtboardName {
-                                Spacer()
-                                Text("default").font(.caption2).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    if info.hasArtboard {
-                        Text("bounds: \(Int(info.artboardBounds.width))x\(Int(info.artboardBounds.height))")
-                            .font(.caption).monospaced().foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("State Machines (\(info.stateMachineNames.count))") {
-                    if info.stateMachineNames.isEmpty {
-                        Text("None").foregroundStyle(.secondary)
-                    }
-                    ForEach(info.stateMachineNames, id: \.self) { name in
-                        HStack {
-                            Text(name).font(.caption).monospaced()
-                            Spacer()
-                            if name == info.defaultStateMachineName {
-                                Text("default").font(.caption2).foregroundStyle(.secondary)
-                            }
-                            if name == info.activeStateMachine {
-                                Text("active").font(.caption2).foregroundStyle(.green)
-                            }
-                        }
-                    }
-                    if info.hasStateMachineInstance {
-                        Text("layers: \(info.stateMachineLayerCount)")
-                            .font(.caption).monospaced().foregroundStyle(.secondary)
-                    }
-                }
-
-                if !info.stateMachineInputs.isEmpty {
-                    Section("SM Inputs (\(info.stateMachineInputs.count))") {
-                        ForEach(info.stateMachineInputs, id: \.name) { input in
-                            HStack {
-                                Text(input.name).font(.caption).monospaced()
-                                Spacer()
-                                Text(input.type).font(.caption2).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-
-                if !info.stateChanges.isEmpty {
-                    Section("State Changes") {
-                        ForEach(info.stateChanges, id: \.self) { change in
-                            Text(change).font(.caption).monospaced()
-                        }
-                    }
-                }
-
-                Section("Animations (\(info.animationNames.count))") {
-                    if info.animationNames.isEmpty {
-                        Text("None").foregroundStyle(.secondary)
-                    }
-                    ForEach(info.animationNames, id: \.self) { name in
-                        HStack {
-                            Text(name).font(.caption).monospaced()
-                            if name == info.activeAnimation {
-                                Spacer()
-                                Text("active").font(.caption2).foregroundStyle(.green)
-                            }
-                        }
-                    }
-                }
-
-                Section("Data Binding") {
-                    Text("View Models: \(info.viewModelCount)")
-                        .font(.caption).monospaced()
-                }
-            } else {
-                Text("No file loaded").foregroundStyle(.secondary)
-            }
-        }
-        .navigationTitle("Rive Inspector")
-    }
-
-    private func debugRow(_ label: String, value: Bool, good: Bool) -> some View {
-        HStack {
-            Text(label).font(.caption).monospaced()
-            Spacer()
-            Text(value ? "YES" : "NO")
-                .font(.caption).monospaced()
-                .foregroundStyle(value == good ? .green : .red)
-        }
-    }
+    var fitMode: String = "contain"
+    var viewSize: CGSize = .zero
 }
 
 struct RiveSourceView: View {
     let source: RiveSource
     @Binding var debugInfo: RiveDebugInfo?
+    @Binding var lockAspectRatio: Bool
+
+    private var currentFit: RiveFit {
+        lockAspectRatio ? .contain : .layout
+    }
+
     @State private var riveViewModel: RiveViewModel?
+    @State private var dataBindingInstance: RiveDataBindingViewModel.Instance?
     @State private var loadError: String?
     @State private var loadMethod: String = ""
     @State private var didLoad = false
+
+    private func enableDefaultAutoBinding(for model: RiveModel) {
+        model.enableAutoBind { instance in
+            dataBindingInstance = instance
+        }
+    }
 
     private func loadSource() {
         guard !didLoad else { return }
@@ -272,8 +175,16 @@ struct RiveSourceView: View {
 
         switch source {
         case .bundled(let name, _):
-            loadMethod = "RiveViewModel(fileName: \"\(name)\")"
-            riveViewModel = RiveViewModel(fileName: name)
+            do {
+                let riveFile = try RiveFile(name: name)
+                let model = RiveModel(riveFile: riveFile)
+                enableDefaultAutoBinding(for: model)
+                riveViewModel = RiveViewModel(model, stateMachineName: nil, fit: currentFit)
+                loadMethod = "RiveFile(name:) + enableAutoBind + RiveViewModel"
+            } catch {
+                loadError = error.localizedDescription
+                loadMethod = "failed"
+            }
 
         case .file(let url):
             do {
@@ -286,8 +197,9 @@ struct RiveSourceView: View {
                 let data = try Data(contentsOf: url)
                 let riveFile = try RiveFile(data: data, loadCdn: false)
                 let model = RiveModel(riveFile: riveFile)
-                riveViewModel = RiveViewModel(model, stateMachineName: nil)
-                loadMethod = "RiveFile(data:) + RiveModel + RiveViewModel"
+                enableDefaultAutoBinding(for: model)
+                riveViewModel = RiveViewModel(model, stateMachineName: nil, fit: currentFit)
+                loadMethod = "RiveFile(data:) + enableAutoBind + RiveViewModel"
             } catch {
                 loadError = error.localizedDescription
                 loadMethod = "failed"
@@ -297,9 +209,11 @@ struct RiveSourceView: View {
         debugInfo = buildDebugInfo()
     }
 
-    private func buildDebugInfo() -> RiveDebugInfo {
+    private func buildDebugInfo(viewSize: CGSize = .zero) -> RiveDebugInfo {
         var info = RiveDebugInfo()
         info.loadMethod = loadMethod
+        info.fitMode = currentFit == .layout ? "layout" : "contain"
+        info.viewSize = viewSize
 
         if let error = loadError {
             info.error = error
@@ -375,22 +289,31 @@ struct RiveSourceView: View {
     }
 
     var body: some View {
-        Group {
-            if let riveViewModel {
-                riveViewModel.view()
-            } else if let loadError {
-                ContentUnavailableView("Failed to Load", systemImage: "exclamationmark.triangle", description: Text(loadError))
-            } else {
-                ProgressView()
+        GeometryReader { geo in
+            Group {
+                if let riveViewModel {
+                    riveViewModel.view()
+                } else if let loadError {
+                    ContentUnavailableView("Failed to Load", systemImage: "exclamationmark.triangle", description: Text(loadError))
+                } else {
+                    ProgressView()
+                }
             }
-        }
-        .onAppear { loadSource() }
-        .task {
-            // Live-update debug info every second so we can see runtime state changes
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                if riveViewModel != nil {
-                    debugInfo = buildDebugInfo()
+            .frame(width: geo.size.width, height: geo.size.height)
+            .onAppear { loadSource() }
+            .onChange(of: lockAspectRatio) {
+                riveViewModel?.fit = currentFit
+                debugInfo = buildDebugInfo(viewSize: geo.size)
+            }
+            .onChange(of: geo.size) {
+                debugInfo = buildDebugInfo(viewSize: geo.size)
+            }
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(1))
+                    if riveViewModel != nil {
+                        debugInfo = buildDebugInfo(viewSize: geo.size)
+                    }
                 }
             }
         }
@@ -398,5 +321,7 @@ struct RiveSourceView: View {
 }
 
 #Preview {
-    ContentView()
+    NavigationStack {
+        ContentView()
+    }
 }
