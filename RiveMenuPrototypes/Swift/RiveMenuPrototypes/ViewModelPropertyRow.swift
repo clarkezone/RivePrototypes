@@ -180,13 +180,9 @@ struct ViewModelPropertyRow: View {
             set: { newColor in
                 property.colorValue = newColor
                 #if os(iOS) || os(visionOS) || os(tvOS)
-                guard let uiColor = UIColor(newColor).cgColor.components, uiColor.count >= 3 else { return }
-                let r = CGFloat(uiColor[0]) * 255
-                let g = CGFloat(uiColor[1]) * 255
-                let b = CGFloat(uiColor[2]) * 255
-                let a = uiColor.count >= 4 ? CGFloat(uiColor[3]) * 255 : 255
-                property.colorProperty?.set(red: r, green: g, blue: b, alpha: a)
-                onPropertyChanged?()
+                var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+                UIColor(newColor).getRed(&r, green: &g, blue: &b, alpha: &a)
+                property.colorProperty?.set(red: r * 255, green: g * 255, blue: b * 255, alpha: a * 255)
                 #else
                 guard let nsColor = NSColor(newColor).usingColorSpace(.sRGB) else { return }
                 property.colorProperty?.set(
@@ -195,8 +191,8 @@ struct ViewModelPropertyRow: View {
                     blue: nsColor.blueComponent * 255,
                     alpha: nsColor.alphaComponent * 255
                 )
-                onPropertyChanged?()
                 #endif
+                onPropertyChanged?()
             }
         )
     }
