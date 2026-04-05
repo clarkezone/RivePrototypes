@@ -103,10 +103,22 @@ struct ViewModelPropertyRow: View {
                     }
                 }
 
-                if property.viewModelDefinition != nil {
+                if property.allViewModels.count == 1 {
                     Button {
-                        property.addListItem()
+                        property.addListItem(using: property.allViewModels[0])
                         onPropertyChanged?()
+                    } label: {
+                        Label("Add Item", systemImage: "plus.circle")
+                            .font(.caption)
+                    }
+                } else if property.allViewModels.count > 1 {
+                    Menu {
+                        ForEach(Array(property.allViewModels.enumerated()), id: \.offset) { _, vm in
+                            Button(vm.name) {
+                                property.addListItem(using: vm)
+                                onPropertyChanged?()
+                            }
+                        }
                     } label: {
                         Label("Add Item", systemImage: "plus.circle")
                             .font(.caption)

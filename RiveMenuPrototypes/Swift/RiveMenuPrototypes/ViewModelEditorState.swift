@@ -10,21 +10,21 @@ final class ViewModelNode: Identifiable {
     let instance: RiveDataBindingViewModel.Instance
     var properties: [ViewModelPropertyNode] = []
 
-    init(instance: RiveDataBindingViewModel.Instance, viewModelDefinition: RiveDataBindingViewModel? = nil) {
+    init(instance: RiveDataBindingViewModel.Instance, allViewModels: [RiveDataBindingViewModel] = []) {
         self.name = instance.name
         self.instance = instance
-        self.properties = Self.discoverProperties(from: instance, viewModelDefinition: viewModelDefinition)
+        self.properties = Self.discoverProperties(from: instance, allViewModels: allViewModels)
     }
 
     private static func discoverProperties(
         from instance: RiveDataBindingViewModel.Instance,
-        viewModelDefinition: RiveDataBindingViewModel?
+        allViewModels: [RiveDataBindingViewModel]
     ) -> [ViewModelPropertyNode] {
         instance.properties.compactMap { propData in
             ViewModelPropertyNode(
                 instance: instance,
                 propertyData: propData,
-                viewModelDefinition: viewModelDefinition
+                allViewModels: allViewModels
             )
         }
     }
@@ -58,17 +58,17 @@ final class ViewModelPropertyNode: Identifiable {
     var listItems: [ViewModelNode] = []
     var listCount: Int = 0
 
-    // For creating new list items
-    private(set) var viewModelDefinition: RiveDataBindingViewModel?
+    // For creating new list items — all available view model definitions
+    private(set) var allViewModels: [RiveDataBindingViewModel] = []
 
     private var listenerID: UUID?
 
     init?(instance: RiveDataBindingViewModel.Instance,
           propertyData: RiveDataBindingViewModel.Instance.Property.Data,
-          viewModelDefinition: RiveDataBindingViewModel?) {
+          allViewModels: [RiveDataBindingViewModel]) {
         self.name = propertyData.name
         self.dataType = propertyData.type
-        self.viewModelDefinition = viewModelDefinition
+        self.allViewModels = allViewModels
 
         switch dataType {
         case .string:
@@ -132,7 +132,7 @@ final class ViewModelPropertyNode: Identifiable {
 
         case .viewModel:
             if let childInstance = instance.viewModelInstanceProperty(fromPath: name) {
-                childNode = ViewModelNode(instance: childInstance, viewModelDefinition: viewModelDefinition)
+                childNode = ViewModelNode(instance: childInstance, allViewModels: allViewModels)
             }
 
         case .list:
@@ -172,13 +172,13 @@ final class ViewModelPropertyNode: Identifiable {
         listCount = count
         listItems = (0..<count).compactMap { index in
             guard let itemInstance = listProperty.instance(at: Int32(index)) else { return nil }
-            return ViewModelNode(instance: itemInstance, viewModelDefinition: viewModelDefinition)
+            return ViewModelNode(instance: itemInstance, allViewModels: allViewModels)
         }
     }
 
-    func addListItem() {
-        guard let listProperty, let viewModelDefinition else { return }
-        guard let newInstance = viewModelDefinition.createInstance() else { return }
+    func addListItem(using viewModel: RiveDataBindingViewModel) {
+        guard let listProperty else { return }
+        guard let newInstance = viewModel.createInstance() else { return }
         listProperty.append(newInstance)
         rebuildListItems()
     }

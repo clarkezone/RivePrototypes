@@ -61,13 +61,14 @@ struct ViewModelEditorView: View {
             rootNode = nil
             return
         }
-        var vmDef: RiveDataBindingViewModel?
+        var allVMs: [RiveDataBindingViewModel] = []
         if let riveFile {
-            // Try to get the first view model definition for list item creation
-            if riveFile.viewModelCount > 0 {
-                vmDef = riveFile.viewModel(at: 0)
+            for i in 0..<Int(riveFile.viewModelCount) {
+                if let vm = riveFile.viewModel(at: UInt(i)) {
+                    allVMs.append(vm)
+                }
             }
         }
-        rootNode = ViewModelNode(instance: dataBindingInstance, viewModelDefinition: vmDef)
+        rootNode = ViewModelNode(instance: dataBindingInstance, allViewModels: allVMs)
     }
 }

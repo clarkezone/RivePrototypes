@@ -78,6 +78,14 @@ struct ContentView: View {
                     .id("\(selectedSource.id)-\(reloadKey)")
                     .ignoresSafeArea()
                     .accessibilityIdentifier("riveCanvas")
+                    .onTapGesture {
+                        if showingInspector || showingViewModelEditor {
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                showingInspector = false
+                                showingViewModelEditor = false
+                            }
+                        }
+                    }
             }
 
             // Inspector overlay
