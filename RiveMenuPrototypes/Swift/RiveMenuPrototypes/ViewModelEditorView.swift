@@ -4,6 +4,7 @@ import RiveRuntime
 struct ViewModelEditorView: View {
     let dataBindingInstance: RiveDataBindingViewModel.Instance?
     let riveFile: RiveFile?
+    var onPropertyChanged: (() -> Void)?
     @Binding var isPresented: Bool
     @State private var rootNode: ViewModelNode?
 
@@ -34,7 +35,7 @@ struct ViewModelEditorView: View {
                 List {
                     Section(rootNode.name) {
                         ForEach(rootNode.properties) { property in
-                            ViewModelPropertyRow(property: property)
+                            ViewModelPropertyRow(property: property, onPropertyChanged: onPropertyChanged)
                         }
                     }
                 }

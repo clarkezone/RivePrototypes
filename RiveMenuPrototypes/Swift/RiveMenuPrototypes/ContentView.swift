@@ -42,6 +42,14 @@ enum RiveSource: Hashable, Identifiable {
     ]
 }
 
+final class RiveViewHolder {
+    var riveView: RiveView?
+
+    func advance() {
+        riveView?.advance(delta: 0)
+    }
+}
+
 struct ContentView: View {
     @State private var selectedSource: RiveSource = RiveSource.builtInAssets[0]
     @State private var showingFilePicker = false
@@ -53,6 +61,7 @@ struct ContentView: View {
     @State private var debugInfo: RiveDebugInfo?
     @State private var dataBindingInstance: RiveDataBindingViewModel.Instance?
     @State private var riveFile: RiveFile?
+    @State private var riveViewHolder = RiveViewHolder()
 
     var body: some View {
         ZStack(alignment: .trailing) {
@@ -65,7 +74,7 @@ struct ContentView: View {
                         .padding(.horizontal)
                 }
 
-                RiveSourceView(source: selectedSource, debugInfo: $debugInfo, lockAspectRatio: $lockAspectRatio, dataBindingInstance: $dataBindingInstance, riveFile: $riveFile)
+                RiveSourceView(source: selectedSource, debugInfo: $debugInfo, lockAspectRatio: $lockAspectRatio, dataBindingInstance: $dataBindingInstance, riveFile: $riveFile, riveViewHolder: riveViewHolder)
                     .id("\(selectedSource.id)-\(reloadKey)")
                     .ignoresSafeArea()
                     .accessibilityIdentifier("riveCanvas")
@@ -90,6 +99,7 @@ struct ContentView: View {
                 ViewModelEditorView(
                     dataBindingInstance: dataBindingInstance,
                     riveFile: riveFile,
+                    onPropertyChanged: { riveViewHolder.advance() },
                     isPresented: $showingViewModelEditor
                 )
                 .transition(.move(edge: .trailing))
@@ -183,6 +193,7 @@ struct RiveSourceView: View {
     @Binding var lockAspectRatio: Bool
     @Binding var dataBindingInstance: RiveDataBindingViewModel.Instance?
     @Binding var riveFile: RiveFile?
+    let riveViewHolder: RiveViewHolder
 
     private var currentFit: RiveFit {
         lockAspectRatio ? .contain : .layout
@@ -328,14 +339,18 @@ struct RiveSourceView: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
-            .onAppear { loadSource() }
+            .onAppear {
+                loadSource()
+                riveViewHolder.riveView = riveViewModel?.riveView
+            }
             .onChange(of: geo.size) {
                 debugInfo = buildDebugInfo(viewSize: geo.size)
             }
             .task {
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(1))
-                    if riveViewModel != nil {
+                    if let riveViewModel {
+                        riveViewHolder.riveView = riveViewModel.riveView
                         debugInfo = buildDebugInfo(viewSize: geo.size)
                     }
                 }

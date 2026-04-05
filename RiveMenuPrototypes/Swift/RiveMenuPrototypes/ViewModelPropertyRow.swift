@@ -3,6 +3,7 @@ import RiveRuntime
 
 struct ViewModelPropertyRow: View {
     @Bindable var property: ViewModelPropertyNode
+    var onPropertyChanged: (() -> Void)?
 
     var body: some View {
         switch property.dataType {
@@ -55,6 +56,7 @@ struct ViewModelPropertyRow: View {
         case .trigger:
             Button {
                 property.triggerProperty?.trigger()
+                onPropertyChanged?()
             } label: {
                 Label(property.name, systemImage: "bolt.fill")
                     .font(.caption).monospaced()
@@ -64,7 +66,7 @@ struct ViewModelPropertyRow: View {
             if let child = property.childNode {
                 DisclosureGroup {
                     ForEach(child.properties) { childProp in
-                        ViewModelPropertyRow(property: childProp)
+                        ViewModelPropertyRow(property: childProp, onPropertyChanged: onPropertyChanged)
                     }
                 } label: {
                     Label(property.name, systemImage: "rectangle.3.group")
@@ -91,6 +93,7 @@ struct ViewModelPropertyRow: View {
                             Spacer()
                             Button(role: .destructive) {
                                 property.removeListItem(at: index)
+                                onPropertyChanged?()
                             } label: {
                                 Image(systemName: "trash")
                                     .font(.caption2)
@@ -103,6 +106,7 @@ struct ViewModelPropertyRow: View {
                 if property.viewModelDefinition != nil {
                     Button {
                         property.addListItem()
+                        onPropertyChanged?()
                     } label: {
                         Label("Add Item", systemImage: "plus.circle")
                             .font(.caption)
@@ -131,6 +135,7 @@ struct ViewModelPropertyRow: View {
             set: { newValue in
                 property.stringValue = newValue
                 property.stringProperty?.value = newValue
+                onPropertyChanged?()
             }
         )
     }
@@ -141,6 +146,7 @@ struct ViewModelPropertyRow: View {
             set: { newValue in
                 property.numberValue = newValue
                 property.numberProperty?.value = newValue
+                onPropertyChanged?()
             }
         )
     }
@@ -151,6 +157,7 @@ struct ViewModelPropertyRow: View {
             set: { newValue in
                 property.boolValue = newValue
                 property.booleanProperty?.value = newValue
+                onPropertyChanged?()
             }
         )
     }
@@ -167,6 +174,7 @@ struct ViewModelPropertyRow: View {
                 let b = CGFloat(uiColor[2]) * 255
                 let a = uiColor.count >= 4 ? CGFloat(uiColor[3]) * 255 : 255
                 property.colorProperty?.set(red: r, green: g, blue: b, alpha: a)
+                onPropertyChanged?()
                 #else
                 guard let nsColor = NSColor(newColor).usingColorSpace(.sRGB) else { return }
                 property.colorProperty?.set(
@@ -175,6 +183,7 @@ struct ViewModelPropertyRow: View {
                     blue: nsColor.blueComponent * 255,
                     alpha: nsColor.alphaComponent * 255
                 )
+                onPropertyChanged?()
                 #endif
             }
         )
@@ -186,6 +195,7 @@ struct ViewModelPropertyRow: View {
             set: { newValue in
                 property.enumValue = newValue
                 property.enumProperty?.value = newValue
+                onPropertyChanged?()
             }
         )
     }
