@@ -7,10 +7,16 @@ final class RiveLayoutUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    private func launchApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments += ["-lockAspectRatio", "0"]
+        app.launch()
+        return app
+    }
+
     /// Verifies the Rive canvas fills the available space on launch.
     func testCanvasFillsOnLaunch() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchApp()
 
         let riveCanvas = app.otherElements["riveCanvas"]
         XCTAssertTrue(riveCanvas.waitForExistence(timeout: 5), "Rive canvas should exist")
@@ -30,8 +36,7 @@ final class RiveLayoutUITests: XCTestCase {
 
     /// Verifies the aspect ratio toggle button switches between layout and contain modes.
     func testAspectRatioToggle() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchApp()
         sleep(1)
 
         let lockButton = app.buttons["Lock Aspect Ratio"]
@@ -84,8 +89,7 @@ final class RiveLayoutUITests: XCTestCase {
     /// - In layout mode: the dark grey fills edge-to-edge, so corners are dark.
     /// - In contain mode: the artboard is letterboxed, so corners are white/light (empty).
     func testLayoutToggleChangesRenderedPixels() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchApp()
         sleep(1)
 
         let riveCanvas = app.otherElements["riveCanvas"]

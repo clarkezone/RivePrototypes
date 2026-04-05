@@ -38,6 +38,7 @@ enum RiveSource: Hashable, Identifiable {
         .bundled(name: "digging_dinosaurs-2", displayName: "Digging Dinosaurs"),
         .bundled(name: "sausagefest", displayName: "Sausagefest"),
         .bundled(name: "layouttest", displayName: "Layout Test"),
+        .bundled(name: "databindtest", displayName: "Data Bind Test"),
     ]
 }
 
@@ -45,10 +46,13 @@ struct ContentView: View {
     @State private var selectedSource: RiveSource = RiveSource.builtInAssets[0]
     @State private var showingFilePicker = false
     @State private var showingInspector = false
+    @State private var showingViewModelEditor = false
     @AppStorage("lockAspectRatio") private var lockAspectRatio = false
     @State private var reloadKey = 0
     @State private var errorMessage: String?
     @State private var debugInfo: RiveDebugInfo?
+    @State private var dataBindingInstance: RiveDataBindingViewModel.Instance?
+    @State private var riveFile: RiveFile?
 
     var body: some View {
         ZStack(alignment: .trailing) {
@@ -61,7 +65,7 @@ struct ContentView: View {
                         .padding(.horizontal)
                 }
 
-                RiveSourceView(source: selectedSource, debugInfo: $debugInfo, lockAspectRatio: $lockAspectRatio)
+                RiveSourceView(source: selectedSource, debugInfo: $debugInfo, lockAspectRatio: $lockAspectRatio, dataBindingInstance: $dataBindingInstance, riveFile: $riveFile)
                     .id("\(selectedSource.id)-\(reloadKey)")
                     .ignoresSafeArea()
                     .accessibilityIdentifier("riveCanvas")
@@ -80,6 +84,19 @@ struct ContentView: View {
                 .padding(.trailing, 8)
                 .zIndex(1)
             }
+
+            // View Model Editor overlay
+            if showingViewModelEditor {
+                ViewModelEditorView(
+                    dataBindingInstance: dataBindingInstance,
+                    riveFile: riveFile,
+                    isPresented: $showingViewModelEditor
+                )
+                .transition(.move(edge: .trailing))
+                .padding(.vertical, 8)
+                .padding(.trailing, showingInspector ? 316 : 8)
+                .zIndex(2)
+            }
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -91,6 +108,16 @@ struct ContentView: View {
                         lockAspectRatio ? "Unlock Aspect Ratio" : "Lock Aspect Ratio",
                         systemImage: lockAspectRatio ? "aspectratio.fill" : "aspectratio"
                     )
+                }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        showingViewModelEditor.toggle()
+                    }
+                } label: {
+                    Label("View Model", systemImage: "slider.horizontal.3")
                 }
             }
 
@@ -154,13 +181,14 @@ struct RiveSourceView: View {
     let source: RiveSource
     @Binding var debugInfo: RiveDebugInfo?
     @Binding var lockAspectRatio: Bool
+    @Binding var dataBindingInstance: RiveDataBindingViewModel.Instance?
+    @Binding var riveFile: RiveFile?
 
     private var currentFit: RiveFit {
         lockAspectRatio ? .contain : .layout
     }
 
     @State private var riveViewModel: RiveViewModel?
-    @State private var dataBindingInstance: RiveDataBindingViewModel.Instance?
     @State private var loadError: String?
     @State private var loadMethod: String = ""
 
@@ -176,8 +204,9 @@ struct RiveSourceView: View {
         switch source {
         case .bundled(let name, _):
             do {
-                let riveFile = try RiveFile(name: name)
-                let model = RiveModel(riveFile: riveFile)
+                let file = try RiveFile(name: name)
+                riveFile = file
+                let model = RiveModel(riveFile: file)
                 enableDefaultAutoBinding(for: model)
                 riveViewModel = RiveViewModel(model, stateMachineName: nil, fit: currentFit)
                 loadMethod = "RiveFile(name:) + enableAutoBind + RiveViewModel"
@@ -195,8 +224,9 @@ struct RiveSourceView: View {
                 }
                 defer { url.stopAccessingSecurityScopedResource() }
                 let data = try Data(contentsOf: url)
-                let riveFile = try RiveFile(data: data, loadCdn: false)
-                let model = RiveModel(riveFile: riveFile)
+                let file = try RiveFile(data: data, loadCdn: false)
+                riveFile = file
+                let model = RiveModel(riveFile: file)
                 enableDefaultAutoBinding(for: model)
                 riveViewModel = RiveViewModel(model, stateMachineName: nil, fit: currentFit)
                 loadMethod = "RiveFile(data:) + enableAutoBind + RiveViewModel"
